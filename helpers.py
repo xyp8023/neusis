@@ -36,7 +36,9 @@ def get_arcs(H, W, phi_min, phi_max, r_min, r_max, c2w, n_selected_px, arc_n_sam
 
     sonar_resolution = (r_max-r_min)/H
     if randomize_points:
-        phi =  torch.clip(phi + rnd, min=phi_min, max=phi_max)
+        # phi =  torch.clip(phi + rnd, min=phi_min, max=phi_max)
+        phi =  torch.clamp(phi + rnd, min=phi_min, max=phi_max)# torch 1.6.0 has no function torch.clip
+
 
     # compute radius at each pixel
     r = i*sonar_resolution + r_min
@@ -95,8 +97,9 @@ def get_arcs(H, W, phi_min, phi_max, r_min, r_max, c2w, n_selected_px, arc_n_sam
     # the first ray_n_samples rows correspond to points along the same ray 
     # the first ray_n_samples*arc_n_samples row correspond to points along rays along the same arc 
     pts = torch.stack((r_samples, theta_samples, phi_samples), dim=-1).reshape(-1, 3)
-
-    dists = torch.diff(r_samples, dim=1)
+    # print(r_samples.shape)
+    # dists = torch.diff(r_samples, dim=1)
+    dists = r_samples[:,1:] - r_samples[:,:-1] # torch 1.6.0 has no function torch.diff
     dists = torch.cat([dists, torch.Tensor([sonar_resolution]).expand(dists[..., :1].shape)], -1)
 
     #r_samples_mid = r_samples + dists/2

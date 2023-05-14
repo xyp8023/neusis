@@ -93,7 +93,10 @@ class NeuSRenderer:
 
         sampled_color = color_network(pts_mid, gradients, dirs, feature_vector).reshape(n_pixels, arc_n_samples, ray_n_samples)
 
-        inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
+        # inv_s = deviation_network(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
+        inv_s = deviation_network(torch.zeros([1, 3]))[:, :1]
+        inv_s = torch.clamp(inv_s, 1e-6, 1e6)# torch 1.6.0 has no function torch.clip
+
 
         inv_s = inv_s.expand(n_pixels*arc_n_samples*ray_n_samples, 1)
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
@@ -115,7 +118,10 @@ class NeuSRenderer:
         p = prev_cdf - next_cdf
         c = prev_cdf
 
-        alpha = ((p + 1e-5) / (c + 1e-5)).reshape(n_pixels, arc_n_samples, ray_n_samples).clip(0.0, 1.0)
+        # alpha = ((p + 1e-5) / (c + 1e-5)).reshape(n_pixels, arc_n_samples, ray_n_samples).clip(0.0, 1.0)
+        alpha = ((p + 1e-5) / (c + 1e-5)).reshape(n_pixels, arc_n_samples, ray_n_samples)
+        alpha = torch.clamp(alpha, 0.0, 1.0)
+
 
         cumuProdAllPointsOnEachRay = torch.cat([torch.ones([n_pixels, arc_n_samples, 1]), 1. - alpha + 1e-7], -1)
     
@@ -134,10 +140,15 @@ class NeuSRenderer:
         # Eikonal loss
         gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
 
-        gradient_error = (torch.linalg.norm(gradients, ord=2,
+        # torch 1.6.0 has no function torch.linalg.norm
+        # gradient_error = (torch.linalg.norm(gradients, ord=2,
+                                            # dim=-1) - 1.0) ** 2
+        gradient_error = (torch.norm(gradients, p=2,
                                             dim=-1) - 1.0) ** 2
 
-        variation_error = torch.linalg.norm(alpha, ord=1, dim=-1).sum()
+        # variation_error = torch.linalg.norm(alpha, ord=1, dim=-1).sum()
+        variation_error = torch.norm(alpha, p=1, dim=-1).sum()
+
 
         return {
             'color': summedIntensities,
