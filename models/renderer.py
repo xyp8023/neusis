@@ -74,14 +74,15 @@ class NeuSRenderer:
                         ray_n_samples,
                         cos_anneal_ratio=0.0):
 
-        dirs_reshaped  = dirs.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
-        pts_reshaped = pts.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
-        dists_reshaped = dists.reshape(n_pixels, arc_n_samples, ray_n_samples, 1)
+        #dirs_reshaped  = dirs.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        #pts_reshaped = pts.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        #dists_reshaped = dists.reshape(n_pixels, arc_n_samples, ray_n_samples, 1)
 
-        pts_mid = pts_reshaped + dirs_reshaped * dists_reshaped/2
+        #pts_mid = pts_reshaped + dirs_reshaped * dists_reshaped/2
 
-        pts_mid = pts_mid.reshape(-1, 3)
-
+        #pts_mid = pts_mid.reshape(-1, 3)
+        pts_mid = pts.transpose(0,1) + dirs * dists.view(-1,1)/2 #(-1,3) Fixed bugs causing by reshape
+        
         sdf_nn_output = sdf_network(pts_mid)
         sdf = sdf_nn_output[:, :1]
 
