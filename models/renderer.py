@@ -81,15 +81,23 @@ class NeuSRenderer:
         #pts_mid = pts_reshaped + dirs_reshaped * dists_reshaped/2
 
         #pts_mid = pts_mid.reshape(-1, 3)
-        pts_mid = pts.transpose(0,1) + dirs * dists.view(-1,1)/2 #(-1,3) Fixed bugs causing by reshape
-        
-        sdf_nn_output = sdf_network(pts_mid)
-        sdf = sdf_nn_output[:, :1]
+        pts_mid = pts + dirs * dists.view(-1,1)/2 #(-1,3)
+
+        sdf_nn_output = sdf_network(pts_mid[:,:2])# 2.5D version
+
+        sdf =  pts_mid[:,2:3]-sdf_nn_output[:, :1]
 
         feature_vector = sdf_nn_output[:, 1:]
 
-        gradients = sdf_network.gradient(pts_mid).squeeze()
+        gradients = sdf_network.gradient(pts_mid[:,:2]).squeeze()
 
+
+        gradients = torch.concat((-gradients, torch.ones_like(gradients[:,:1])),dim=1) # TODO maybe its (-gradients,1) or (gradients,0)
+        # calculate the gradient error before normalizing, as a regularization
+        gradient_error = (torch.norm(gradients, p=2,
+                                            dim=-1) - 1.0) ** 2
+
+        gradients = F.normalize(gradients, dim=1)
 
 
         sampled_color = color_network(pts_mid, gradients, dirs, feature_vector).reshape(n_pixels, arc_n_samples, ray_n_samples)
@@ -101,6 +109,8 @@ class NeuSRenderer:
 
         inv_s = inv_s.expand(n_pixels*arc_n_samples*ray_n_samples, 1)
         true_cos = (dirs * gradients).sum(-1, keepdim=True)
+        # I think this is the same
+        # true_cos = F.cosine_similarity(dirs,gradients,dim=1).view(-1,1)
 
         # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
         # the cos value "not dead" at the beginning training iterations, for better convergence.
@@ -134,18 +144,21 @@ class NeuSRenderer:
 
         weights = alphaPointsOnArc * TransmittancePointsOnArc 
 
-        intensityPointsOnArc = sampled_color[:, :, ray_n_samples-1]
+        # intensityPointsOnArc = sampled_color[:, :, ray_n_samples-1]
+        # lambertian model, k is the constant for normalization
+        intensityPointsOnArc = ((true_cos.reshape(n_pixels, arc_n_samples, ray_n_samples)[:, :, ray_n_samples-1])**2)* torch.exp(deviation_network.k)
+
 
         summedIntensities = (intensityPointsOnArc*weights).sum(dim=1) 
 
         # Eikonal loss
-        gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
+        # gradients = gradients.reshape(n_pixels, arc_n_samples, ray_n_samples, 3)
 
         # torch 1.6.0 has no function torch.linalg.norm
         # gradient_error = (torch.linalg.norm(gradients, ord=2,
                                             # dim=-1) - 1.0) ** 2
-        gradient_error = (torch.norm(gradients, p=2,
-                                            dim=-1) - 1.0) ** 2
+        # gradient_error = (torch.norm(gradients, p=2,
+                                            # dim=-1) - 1.0) ** 2
 
         # variation_error = torch.linalg.norm(alpha, ord=1, dim=-1).sum()
         variation_error = torch.norm(alpha, p=1, dim=-1).sum()
